@@ -9,10 +9,8 @@ import java.lang.Thread.sleep
 import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletResponse
-import kotlin.Exception
 
 object TheiaContainerController {
 
@@ -28,7 +26,7 @@ object TheiaContainerController {
     private const val THEIA_STARTUP_CURL_TIME = 300L
     private val theiaImage: String = System.getenv("THEIA-IMAGE") ?: "theiaide/theia" //ENVIRONMENT VARIABLE FOR THEIA IMAGE
     private val THEIA_CONTAINER_TIMEOUT: Int = if (System.getenv("THEIA_TIMEOUT") == null) 5000 else System.getenv("THEIA_TIMEOUT").toInt() //ENVIRONMENT VARIABLE FOR TIMEOUT TIME FOR CONTAINERS (WHEN TO SHUT DOWN)
-    private val THEIA_STARTUP_SCRIPT = "docker run --network theia-controller_default --name %s $theiaImage" //ENVIRONMENT VARIABLE FOR EXTRA THEIA ARGUMENTS
+    private val THEIA_STARTUP_SCRIPT = "docker run --network theia-controller_default --name %s $theiaImage"
     private val containerMap = ConcurrentHashMap<String,Process>()
     private val waitingClients = ConcurrentHashMap<String,LinkedList<ClientRequest>>()
 
@@ -43,38 +41,39 @@ object TheiaContainerController {
 
     private fun startContainer(id: String){
         logger.info("Attempting to start a container")
-        while(true){
-            //TODO Maybe get args from environment variable too since were allowing environment variables to set docker args
-            //TODO Use config server for theia stuff
-            val dockerId = getTheiaContainerName(id)
-            logger.info("Trying to start a container")
-            logger.info("Running command ${THEIA_STARTUP_SCRIPT.format(dockerId)}")
-            val pb = ProcessBuilder(THEIA_STARTUP_SCRIPT.format(dockerId).split(" "))
+        //TODO Maybe get args from environment variable too since were allowing environment variables to set docker args
+        //TODO Use config server for theia stuff
+        val dockerId = getTheiaContainerName(id)
+        logger.info("Running command ${THEIA_STARTUP_SCRIPT.format(dockerId)}")
+        val pb = ProcessBuilder(THEIA_STARTUP_SCRIPT.format(dockerId).split(" "))
 //            pb.redirectError(ProcessBuilder.Redirect.INHERIT)
 //            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
-            val p = pb.start()
-            p.waitFor(THEIA_STARTUP_WAIT, TimeUnit.MILLISECONDS)
-            try {
-                if(p.exitValue() == 126){
-                    logger.info("Command failed to execute got exit status 126")
-                    containerStartupFailure(id,Throwable("Server Failure. Could not start theia instance exit code 126"))
-                    return
-                }
-                continue //Process exited (Theia container failed to startup. Probably because port in use or smth)
-            } catch (e: Exception) {
-                logger.info("Theia container started for $id")
-                while (true) {
-                    val cb = ProcessBuilder("curl $dockerId:3000".split(' '))
+        val p = pb.start()
+        p.waitFor(THEIA_STARTUP_WAIT, TimeUnit.MILLISECONDS)
+        if(p.isAlive){
+            logger.info("Theia container started for $id")
+            if(waitForTheiaResponse(dockerId)) {
+                containerStartupSuccess(id,p)
+                return
+            }
+        }
+        else {
+            val ev = p.exitValue()
+            logger.error("Failed to start up theia docker container. Got exit status $ev")
+        }
+        containerStartupFailure(id,Throwable("Server Failure. Could not start theia instance"))
+    }
+
+    private fun waitForTheiaResponse(dockerId: String): Boolean{
+        while (true) {
+            val cb = ProcessBuilder("curl $dockerId:3000".split(' '))
 //                    cb.redirectError(ProcessBuilder.Redirect.INHERIT)
 //                    cb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                    val curl = cb.start()
-                    curl.waitFor()
-                    if (curl.exitValue() == 0) {//Curl exited with no errors. Theia container must have started
-                        containerStartupSuccess(id, p)
-                        return
-                    } else sleep(THEIA_STARTUP_CURL_TIME)
-                }
-            }
+            val curl = cb.start()
+            curl.waitFor()
+            if (curl.exitValue() == 0) {//Curl exited with no errors. Theia container must have started
+                return true
+            } else sleep(THEIA_STARTUP_CURL_TIME)
         }
     }
 
@@ -83,7 +82,6 @@ object TheiaContainerController {
             it.future.completeExceptionally(exception)
         }
     }
-
 
     private fun containerStartupSuccess(id: String, p: Process){
         logger.info("Successfully started theia container")
