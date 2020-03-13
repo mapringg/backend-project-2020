@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.4.1/css/bootstrap.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"
+    />
+    <style>
+      .container {
+        height: 100vh;
+        display: grid;
+        grid-template-areas:
+          "signin signin signin"
+          "facebook google github";
+        justify-items: center;
+        grid-template-rows: 2fr 3fr;
+      }
+      .signin {
+        grid-area: signin;
+        align-self: center;
+      }
+      .fa-facebook-square {
+        grid-area: facebook;
+      }
+      .fa-google-plus-square {
+        grid-area: google;
+      }
+      .fa-github-square {
+        grid-area: github;
+      }
+    </style>
+  </head>
+  <body>
+    <%- include('components/navbar.ejs') %>
+    <div class="container">
+      <h1 class="signin">Sign in with these providers</h1>
+      <a href="/auth/google"><i class="fa-10x fab fa-facebook-square"></i></a>
+      <a href="/auth/google"
+        ><i class="fa-10x fab fa-google-plus-square" style="color:red"></i
+      ></a>
+      <a href="/auth/google"
+        ><i class="fa-10x fab fa-github-square" style="color:gray"></i
+      ></a>
+    </div>
+  </body>
+</html>
