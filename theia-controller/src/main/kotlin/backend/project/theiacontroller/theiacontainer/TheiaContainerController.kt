@@ -20,9 +20,7 @@ object TheiaContainerController {
     //TODO SHUT DOWN CONTAINERS AFTER A WHILE
     //TODO STOP CURL REQUESTS IF CONTAINER GOES DOWN FOR SOME REASON
 
-    data class ContainerInfo(val port: Int, val process: Process)
     data class ClientRequest(val future: CompletableFuture<ResponseEntity<String>>, val response: HttpServletResponse)
-    class NoPortAvailableExcetion: Exception()
 
     private val logger: Logger = LoggerFactory.getLogger(this.javaClass)
 
@@ -31,18 +29,11 @@ object TheiaContainerController {
     private val theiaImage: String = System.getenv("THEIA-IMAGE") ?: "theiaide/theia" //ENVIRONMENT VARIABLE FOR THEIA IMAGE
     private val THEIA_CONTAINER_TIMEOUT: Int = if (System.getenv("THEIA_TIMEOUT") == null) 5000 else System.getenv("THEIA_TIMEOUT").toInt() //ENVIRONMENT VARIABLE FOR TIMEOUT TIME FOR CONTAINERS (WHEN TO SHUT DOWN)
     private val THEIA_STARTUP_SCRIPT = "docker run --network theia-controller_default --name %s $theiaImage" //ENVIRONMENT VARIABLE FOR EXTRA THEIA ARGUMENTS
-    private val containerMap = ConcurrentHashMap<String,ContainerInfo>()
-    private val freePorts = LinkedBlockingQueue<Int>()
+    private val containerMap = ConcurrentHashMap<String,Process>()
     private val waitingClients = ConcurrentHashMap<String,LinkedList<ClientRequest>>()
 
     public fun getTheiaContainerName(id: String): String{
         return "theia-$id"
-    }
-
-    init {
-        for(i in 49152..65535){
-            freePorts.add(i)
-        }
     }
 
     fun getRoute(id: String): String?{
@@ -52,11 +43,7 @@ object TheiaContainerController {
 
     private fun startContainer(id: String){
         logger.info("Attempting to start a container")
-        if(freePorts.size == 0){
-            throw NoPortAvailableExcetion()
-        }
         while(true){
-            val port = freePorts.poll()
             //TODO Maybe get args from environment variable too since were allowing environment variables to set docker args
             //TODO Use config server for theia stuff
             val dockerId = getTheiaContainerName(id)
@@ -75,15 +62,15 @@ object TheiaContainerController {
                 }
                 continue //Process exited (Theia container failed to startup. Probably because port in use or smth)
             } catch (e: Exception) {
-                logger.info("Container started on port:$port")
+                logger.info("Theia container started for $id")
                 while (true) {
                     val cb = ProcessBuilder("curl $dockerId:3000".split(' '))
-                    cb.redirectError(ProcessBuilder.Redirect.INHERIT)
-                    cb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
+//                    cb.redirectError(ProcessBuilder.Redirect.INHERIT)
+//                    cb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
                     val curl = cb.start()
                     curl.waitFor()
                     if (curl.exitValue() == 0) {//Curl exited with no errors. Theia container must have started
-                        containerStartupSuccess(id, port, p)
+                        containerStartupSuccess(id, p)
                         return
                     } else sleep(THEIA_STARTUP_CURL_TIME)
                 }
@@ -98,11 +85,10 @@ object TheiaContainerController {
     }
 
 
-    private fun containerStartupSuccess(id: String, port:Int, p: Process){
+    private fun containerStartupSuccess(id: String, p: Process){
         logger.info("Successfully started theia container")
-        containerMap[id] = ContainerInfo(port,p)
-        val idPort = containerMap.mapValues { k -> k.value.port }
-        NginxConfigurer.rewriteConfig(idPort,true)
+        containerMap[id] = p
+        NginxConfigurer.rewriteConfig(containerMap.keys().toList(),true)
         NginxConfigurer.waitForNginxContainer(id)
         waitingClients[id]!!.forEach {
             it.response.sendRedirect(getRoute(id))

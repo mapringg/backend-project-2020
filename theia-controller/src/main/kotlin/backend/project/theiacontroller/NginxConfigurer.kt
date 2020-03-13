@@ -36,13 +36,14 @@ object NginxConfigurer {
         }
 
         //Remove any floating containers
+        logger.info("Removing floating containers")
         val rb = ProcessBuilder("/bin/sh","-c","docker ps --filter name=theia-* -aq | xargs docker stop | xargs docker rm")
-        rb.redirectError(ProcessBuilder.Redirect.INHERIT)
-        rb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
+//        rb.redirectError(ProcessBuilder.Redirect.INHERIT)
+//        rb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
         val rp = rb.start()
         rp.waitFor()
 
-        rewriteConfig(mapOf(),true)
+        rewriteConfig(listOf(),true)
 
     }
 
@@ -68,21 +69,21 @@ object NginxConfigurer {
     }
 
     @Synchronized
-    public final fun rewriteConfig(containers: Map<String,Int>, reload: Boolean){
+    public final fun rewriteConfig(containers: Collection<String>, reload: Boolean){
         val preConfig = ClassPathResource("/templates/nginx-pre-default").inputStream.reader().readText()
         val nginxConfig = File(filePath)
 
         val writer = nginxConfig.writer()
         writer.write(preConfig)
         val upstreamTemplate = ClassPathResource("/templates/nginx-upstream-template").inputStream.reader().readText()
-        for (c in containers.keys) {
+        for (c in containers) {
             val containerName = TheiaContainerController.getTheiaContainerName(c)
             writer.write(upstreamTemplate.format(c,containerName))
         }
         val midConfig = ClassPathResource("/templates/nginx-mid-default").inputStream.reader().readText()
         writer.write(midConfig)
         val serverConfig = ClassPathResource("/templates/nginx-server-template").inputStream.reader().readText()
-        for(c in containers.keys) {
+        for(c in containers) {
             writer.write(serverConfig.format(c,c))
         }
         val endConfig = ClassPathResource("/templates/nginx-end-default").inputStream.reader().readText()
@@ -90,8 +91,8 @@ object NginxConfigurer {
         writer.flush()
         writer.close()
 
-        logger.info("Wrote to nginx config. File contents:")
-        logger.info(nginxConfig.readText())
+//        logger.info("Wrote to nginx config. File contents:")
+//        logger.info(nginxConfig.readText())
 
         if(reload)
             reloadNginxConfig()
