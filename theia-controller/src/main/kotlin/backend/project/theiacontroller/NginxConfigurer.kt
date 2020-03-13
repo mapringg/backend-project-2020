@@ -46,6 +46,17 @@ object NginxConfigurer {
 
     }
 
+    public fun waitForNginxContainer(id: String){
+        logger.info("Waiting for nginx to register container connection")
+        while(true) { //TODO Add timeout
+            val cb = ProcessBuilder("curl $NGINX_ADDRESS/$id".split(' '))
+            val cp = cb.start()
+            val output = cp.inputStream.bufferedReader().readText()
+            if(!output.contains("<head><title>404 Not Found</title></head>")) return
+            else sleep(300)
+        }
+    }
+
     private fun waitForNginx(){
         while(true){
             val cb = ProcessBuilder("curl","$NGINX_ADDRESS:$NGINX_PORT")
@@ -65,8 +76,8 @@ object NginxConfigurer {
         writer.write(preConfig)
         val upstreamTemplate = ClassPathResource("/templates/nginx-upstream-template").inputStream.reader().readText()
         for (c in containers.keys) {
-            val containerName = TheiaContainerController.getThaiaContainerName(c)
-            writer.write(upstreamTemplate.format(c,containerName,containers[c]))
+            val containerName = TheiaContainerController.getTheiaContainerName(c)
+            writer.write(upstreamTemplate.format(c,containerName))
         }
         val midConfig = ClassPathResource("/templates/nginx-mid-default").inputStream.reader().readText()
         writer.write(midConfig)

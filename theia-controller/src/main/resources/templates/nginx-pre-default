@@ -12,6 +12,8 @@ http{
         '' close;
     }
 
+    sendfile on;
+
     upstream container {
         server containerManager:8080;
     }

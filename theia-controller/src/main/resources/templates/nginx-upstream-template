@@ -1,3 +1,3 @@
-upstream %s {
-    server %s:%d;
-}
+    upstream %s {
+        server %s:3000;
+    }
