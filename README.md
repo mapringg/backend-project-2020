@@ -1,6 +1,6 @@
 # Backend Final Project
 
-Spring + VueJs + Theia-IDE + 
+Spring + VueJs + Theia-IDE +  Docker + Kubernates
 
 ---
 ## Requirements
