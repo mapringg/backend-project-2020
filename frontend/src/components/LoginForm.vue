@@ -8,7 +8,7 @@
       <i class="fa-10x fab fa-google-plus-square" style="color:red"></i>
     </a>
     <a href="/auth/google">
-      <i class="fa-10x fab fa-github-square" style="color:gray"></i>
+      <!-- <i class="fa-10x fab fa-github-square" style="color:gray"></i> -->
     </a>
   </v-form>
 </template>
@@ -18,7 +18,7 @@ export default {};
 </script>
 
 <style scoped>
-#login-form { 
+#login-form {
   display: grid;
   grid-template-areas:
     "signin signin signin"
