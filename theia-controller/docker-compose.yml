@@ -25,6 +25,7 @@ services:
     environment:
       NGINX_ADDRESS: nginx
       NGINX_DOCKER_NAME: nginx-proxy
+#      THEIA_TIMEOUT: 60000
 #      NETWORK_ADDRESS: containerManager
     volumes:
     - nginx_config:/etc/nginx
