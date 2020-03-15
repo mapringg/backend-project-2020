@@ -32,7 +32,6 @@ object TheiaContainerController {
     private val theiaImage: String = System.getenv("THEIA-IMAGE") ?: "theiaide/theia" //ENVIRONMENT VARIABLE FOR THEIA IMAGE
     private val THEIA_CONTAINER_TIMEOUT: Long = if (System.getenv("THEIA_TIMEOUT") == null) 60 * 60 * 1000 else System.getenv("THEIA_TIMEOUT").toLong() //ENVIRONMENT VARIABLE FOR TIMEOUT TIME FOR CONTAINERS (WHEN TO SHUT DOWN)
     private val THEIA_STARTUP_SCRIPT = "docker run --network theia-controller_default --name %s $theiaImage"
-    private val THEIA_CONTAINER_REMOVAL_DELAY: Long = if(System.getenv("THEIA_REMOVAL_CHECK_DELAY") == null) 60000 else System.getenv("THEIA_REMOVAL_CHECK_DELAY").toLong()
     private val containerMap = ConcurrentHashMap<String,ContainerInfo>()
     private val waitingClients = ConcurrentHashMap<String,LinkedList<ClientRequest>>()
 
@@ -40,7 +39,7 @@ object TheiaContainerController {
 //        shutDownOldContainers()
 //    }
 
-    public fun getTheiaContainerName(id: String): String{
+    fun getTheiaContainerName(id: String): String{
         return "theia-$id"
     }
 

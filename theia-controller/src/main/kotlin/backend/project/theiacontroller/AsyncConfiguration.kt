@@ -14,7 +14,7 @@ import java.util.concurrent.Executor
 class AsyncConfiguration {
 
     @Bean(name = ["containerExecutor"])
-    public fun asyncExecutor(): Executor{
+    fun asyncExecutor(): Executor{
         val executor = ThreadPoolTaskExecutor()
         executor.corePoolSize = 3
         executor.maxPoolSize = 3

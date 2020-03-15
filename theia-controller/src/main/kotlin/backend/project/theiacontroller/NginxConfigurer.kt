@@ -45,7 +45,7 @@ object NginxConfigurer {
 
     }
 
-    public fun waitForNginxContainer(id: String){
+    fun waitForNginxContainer(id: String){
         logger.info("Waiting for nginx to register container connection")
         while(true) { //TODO Add timeout
             val cb = ProcessBuilder("curl $NGINX_ADDRESS/$id".split(' '))
@@ -67,7 +67,7 @@ object NginxConfigurer {
     }
 
     @Synchronized
-    public final fun rewriteConfig(containers: Collection<String>, reload: Boolean){
+    final fun rewriteConfig(containers: Collection<String>, reload: Boolean){
         val preConfig = ClassPathResource("/templates/nginx-pre-default").inputStream.reader().readText()
         val nginxConfig = File(filePath)
 
