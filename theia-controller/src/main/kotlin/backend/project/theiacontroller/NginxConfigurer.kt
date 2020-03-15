@@ -17,8 +17,6 @@ object NginxConfigurer {
     private val NGINX_CONTAINER_NAME = System.getenv("NGINX_DOCKER_NAME")?: "nginx-container"
     private val NGINX_ADDRESS = System.getenv("NGINX_ADDRESS")?: "localhost"
     private val NGINX_PORT = System.getenv("NGINX_PORT")?: 80
-    private val runtime = Runtime.getRuntime()
-//    private var nginx: Process? = null
 
     init {
         val nginxConfig = File(filePath)

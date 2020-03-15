@@ -19,8 +19,8 @@ import javax.servlet.http.HttpServletResponse
 object TheiaContainerController {
 
     //TODO VERY URGENT
-    //TODO SHUT DOWN CONTAINERS AFTER A WHILE
     //TODO STOP CURL REQUESTS IF CONTAINER GOES DOWN FOR SOME REASON
+    //TODO USE NGINX LOGS TO DETERMINE IF CONTAINER IS STILL ACTIVE OR NOT
 
     data class ClientRequest(val future: CompletableFuture<ResponseEntity<String>>, val response: HttpServletResponse)
     data class ContainerInfo(val process: Process, val timeStarted: Long)
@@ -96,7 +96,7 @@ object TheiaContainerController {
     private fun containerStartupSuccess(id: String, p: Process){
         logger.info("Successfully started theia container")
         containerMap[id] = ContainerInfo(p,System.currentTimeMillis())
-        NginxConfigurer.rewriteConfig(containerMap.keys().toList(),true)
+        NginxConfigurer.rewriteConfig(containerMap.keys,true)
         NginxConfigurer.waitForNginxContainer(id)
         waitingClients[id]!!.forEach {
             it.response.sendRedirect(getRoute(id))
@@ -135,8 +135,10 @@ object TheiaContainerController {
                 containersClosed++
             }
         }
-        if(containersClosed > 0)
+        if(containersClosed > 0) {
             logger.info("Shut down $containersClosed containers")
+            NginxConfigurer.rewriteConfig(containerMap.keys,true)
+        }
     }
 
 }
