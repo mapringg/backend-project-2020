@@ -5,6 +5,8 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.stereotype.Service
 import java.lang.Thread.sleep
 import java.util.*
 import java.util.concurrent.CompletableFuture
@@ -12,6 +14,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletResponse
 
+
+@Service
 object TheiaContainerController {
 
     //TODO VERY URGENT
@@ -19,16 +23,22 @@ object TheiaContainerController {
     //TODO STOP CURL REQUESTS IF CONTAINER GOES DOWN FOR SOME REASON
 
     data class ClientRequest(val future: CompletableFuture<ResponseEntity<String>>, val response: HttpServletResponse)
+    data class ContainerInfo(val process: Process, val timeStarted: Long)
 
     private val logger: Logger = LoggerFactory.getLogger(this.javaClass)
 
     private const val THEIA_STARTUP_WAIT = 300L
     private const val THEIA_STARTUP_CURL_TIME = 300L
     private val theiaImage: String = System.getenv("THEIA-IMAGE") ?: "theiaide/theia" //ENVIRONMENT VARIABLE FOR THEIA IMAGE
-    private val THEIA_CONTAINER_TIMEOUT: Int = if (System.getenv("THEIA_TIMEOUT") == null) 5000 else System.getenv("THEIA_TIMEOUT").toInt() //ENVIRONMENT VARIABLE FOR TIMEOUT TIME FOR CONTAINERS (WHEN TO SHUT DOWN)
+    private val THEIA_CONTAINER_TIMEOUT: Long = if (System.getenv("THEIA_TIMEOUT") == null) 60 * 60 * 1000 else System.getenv("THEIA_TIMEOUT").toLong() //ENVIRONMENT VARIABLE FOR TIMEOUT TIME FOR CONTAINERS (WHEN TO SHUT DOWN)
     private val THEIA_STARTUP_SCRIPT = "docker run --network theia-controller_default --name %s $theiaImage"
-    private val containerMap = ConcurrentHashMap<String,Process>()
+    private val THEIA_CONTAINER_REMOVAL_DELAY: Long = if(System.getenv("THEIA_REMOVAL_CHECK_DELAY") == null) 60000 else System.getenv("THEIA_REMOVAL_CHECK_DELAY").toLong()
+    private val containerMap = ConcurrentHashMap<String,ContainerInfo>()
     private val waitingClients = ConcurrentHashMap<String,LinkedList<ClientRequest>>()
+
+//    init {
+//        shutDownOldContainers()
+//    }
 
     public fun getTheiaContainerName(id: String): String{
         return "theia-$id"
@@ -85,7 +95,7 @@ object TheiaContainerController {
 
     private fun containerStartupSuccess(id: String, p: Process){
         logger.info("Successfully started theia container")
-        containerMap[id] = p
+        containerMap[id] = ContainerInfo(p,System.currentTimeMillis())
         NginxConfigurer.rewriteConfig(containerMap.keys().toList(),true)
         NginxConfigurer.waitForNginxContainer(id)
         waitingClients[id]!!.forEach {
@@ -103,4 +113,30 @@ object TheiaContainerController {
             }
         }
     }
+
+    private fun shutDownContainer(id: String){
+        val details = containerMap[id]
+        if(details == null){
+            logger.warn("Container map does not contain entry for id $id")
+            return
+        }
+        containerMap.remove(id)
+        details.process.destroy()
+    }
+
+    @Scheduled(fixedDelay = 60000)
+    fun shutDownOldContainers(){
+        logger.info("Running scheduled job: Remove old containers")
+        val time = System.currentTimeMillis()
+        var containersClosed = 0
+        for(c in containerMap.keys){
+            if(time - containerMap[c]!!.timeStarted > THEIA_CONTAINER_TIMEOUT){
+                shutDownContainer(c)
+                containersClosed++
+            }
+        }
+        if(containersClosed > 0)
+            logger.info("Shut down $containersClosed containers")
+    }
+
 }
