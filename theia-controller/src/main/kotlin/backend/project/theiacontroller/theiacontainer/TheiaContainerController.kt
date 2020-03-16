@@ -19,7 +19,6 @@ import javax.servlet.http.HttpServletResponse
 object TheiaContainerController {
 
     //TODO VERY URGENT
-    //TODO STOP CURL REQUESTS IF CONTAINER GOES DOWN FOR SOME REASON
     //TODO USE NGINX LOGS TO DETERMINE IF CONTAINER IS STILL ACTIVE OR NOT
 
     data class ClientRequest(val future: CompletableFuture<ResponseEntity<String>>, val response: HttpServletResponse)
@@ -29,9 +28,9 @@ object TheiaContainerController {
 
     private const val THEIA_STARTUP_WAIT = 300L
     private const val THEIA_STARTUP_CURL_TIME = 300L
-    private val theiaImage: String = System.getenv("THEIA-IMAGE") ?: "theiaide/theia" //ENVIRONMENT VARIABLE FOR THEIA IMAGE
+    private val THEIA_IMAGE: String = System.getenv("THEIA-IMAGE") ?: "theiaide/theia" //ENVIRONMENT VARIABLE FOR THEIA IMAGE
     private val THEIA_CONTAINER_TIMEOUT: Long = if (System.getenv("THEIA_TIMEOUT") == null) 60 * 60 * 1000 else System.getenv("THEIA_TIMEOUT").toLong() //ENVIRONMENT VARIABLE FOR TIMEOUT TIME FOR CONTAINERS (WHEN TO SHUT DOWN)
-    private val THEIA_STARTUP_SCRIPT = "docker run --network theia-controller_default --name %s $theiaImage"
+    private val THEIA_STARTUP_SCRIPT = "docker run --network theia-controller_default --name %s $THEIA_IMAGE"
     private val containerMap = ConcurrentHashMap<String,ContainerInfo>()
     private val waitingClients = ConcurrentHashMap<String,LinkedList<ClientRequest>>()
 
@@ -59,12 +58,10 @@ object TheiaContainerController {
 //            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
         val p = pb.start()
         p.waitFor(THEIA_STARTUP_WAIT, TimeUnit.MILLISECONDS)
-        if(p.isAlive){
-            logger.info("Theia container started for $id")
-            if(waitForTheiaResponse(dockerId)) {
-                containerStartupSuccess(id,p)
-                return
-            }
+        logger.info("Theia container started for $id")
+        if(waitForTheiaResponse(dockerId,p)) {
+            containerStartupSuccess(id,p)
+            return
         }
         else {
             val ev = p.exitValue()
@@ -73,8 +70,8 @@ object TheiaContainerController {
         containerStartupFailure(id,Throwable("Server Failure. Could not start theia instance"))
     }
 
-    private fun waitForTheiaResponse(dockerId: String): Boolean{
-        while (true) {
+    private fun waitForTheiaResponse(dockerId: String, theia: Process): Boolean{
+        while (theia.isAlive) {
             val cb = ProcessBuilder("curl $dockerId:3000".split(' '))
 //                    cb.redirectError(ProcessBuilder.Redirect.INHERIT)
 //                    cb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
@@ -84,22 +81,29 @@ object TheiaContainerController {
                 return true
             } else sleep(THEIA_STARTUP_CURL_TIME)
         }
+        return false
     }
 
     private fun containerStartupFailure(id: String, exception: Throwable){
+        shutDownContainer(id,true)
         waitingClients[id]!!.forEach{
             it.future.completeExceptionally(exception)
         }
     }
 
     private fun containerStartupSuccess(id: String, p: Process){
-        logger.info("Successfully started theia container")
-        containerMap[id] = ContainerInfo(p,System.currentTimeMillis())
-        NginxConfigurer.rewriteConfig(containerMap.keys,true)
-        NginxConfigurer.waitForNginxContainer(id)
-        waitingClients[id]!!.forEach {
-            it.response.sendRedirect(getRoute(id))
-            it.future.complete(ResponseEntity(HttpStatus.OK))
+        try {
+            logger.info("Successfully started theia container")
+            containerMap[id] = ContainerInfo(p, System.currentTimeMillis())
+            NginxConfigurer.rewriteConfig(containerMap.keys, true)
+            NginxConfigurer.waitForNginxContainer(id)
+            waitingClients[id]!!.forEach {
+                it.response.sendRedirect(getRoute(id))
+                it.future.complete(ResponseEntity(HttpStatus.OK))
+            }
+        }
+        catch(e: Exception){
+            containerStartupFailure(id,e)
         }
     }
 
@@ -113,10 +117,11 @@ object TheiaContainerController {
         }
     }
 
-    private fun shutDownContainer(id: String){
+    private fun shutDownContainer(id: String, force: Boolean = false){
         val details = containerMap[id]
         if(details == null){
-            logger.warn("Container map does not contain entry for id $id")
+            if(!force)
+                logger.warn("Container map does not contain entry for id $id")
             return
         }
         containerMap.remove(id)
