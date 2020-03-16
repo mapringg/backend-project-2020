@@ -17,8 +17,9 @@ object NginxConfigurer {
     private val NGINX_CONTAINER_NAME = System.getenv("NGINX_DOCKER_NAME")?: "nginx-container"
     private val NGINX_ADDRESS = System.getenv("NGINX_ADDRESS")?: "localhost"
     private val NGINX_PORT = System.getenv("NGINX_PORT")?: 80
-    private val runtime = Runtime.getRuntime()
-//    private var nginx: Process? = null
+    private val WAIT_NGINX_TIMEOUT = if(System.getenv("NGINX_WAIT_TIMEOUT") == null) 10000 else System.getenv("NGINX_WAIT_TIMEOUT").toLong()
+    private val NGINX_CURL_DELAY = if(System.getenv("NGINX_CURL_DELAY") == null) 300 else System.getenv("NGINX_CURL_DELAY").toLong()
+    private val NGINX_STARTUP_WAIT = if(System.getenv("NGINX_STARTUP_WAIT") == null) 60000 else System.getenv("NGINX_STARTUP_WAIT").toLong()
 
     init {
         val nginxConfig = File(filePath)
@@ -47,29 +48,33 @@ object NginxConfigurer {
 
     }
 
-    public fun waitForNginxContainer(id: String){
+    fun waitForNginxContainer(id: String){
         logger.info("Waiting for nginx to register container connection")
-        while(true) { //TODO Add timeout
+        val loops = WAIT_NGINX_TIMEOUT/ NGINX_CURL_DELAY
+        for(i in 0..loops) {
             val cb = ProcessBuilder("curl $NGINX_ADDRESS/$id".split(' '))
             val cp = cb.start()
             val output = cp.inputStream.bufferedReader().readText()
             if(!output.contains("<head><title>404 Not Found</title></head>")) return
-            else sleep(300)
+            else sleep(NGINX_CURL_DELAY)
         }
+        throw Exception("Could not connect to theia instance through nginx")
     }
 
-    private fun waitForNginx(){
-        while(true){
+    private fun waitForNginxStartup(){
+        for(i in 0..NGINX_STARTUP_WAIT/ NGINX_CURL_DELAY){
+//            logger.info("Polling nginx")
             val cb = ProcessBuilder("curl","$NGINX_ADDRESS:$NGINX_PORT")
             val c = cb.start()
             c.waitFor()
-            if(c.exitValue() == 0) break
-            else sleep(300)
+            if(c.exitValue() == 0) return
+            else sleep(NGINX_CURL_DELAY)
         }
+        throw Exception("Nginx not detected")
     }
 
     @Synchronized
-    public final fun rewriteConfig(containers: Collection<String>, reload: Boolean){
+    final fun rewriteConfig(containers: Collection<String>, reload: Boolean){
         val preConfig = ClassPathResource("/templates/nginx-pre-default").inputStream.reader().readText()
         val nginxConfig = File(filePath)
 
@@ -99,7 +104,7 @@ object NginxConfigurer {
     }
     private fun reloadNginxConfig(){
         logger.info("Reloading nginx config")
-        waitForNginx()
+        waitForNginxStartup()
         val ub = ProcessBuilder("docker exec $NGINX_CONTAINER_NAME nginx -s reload".split(' '))
         ub.redirectError(ProcessBuilder.Redirect.INHERIT)
         ub.redirectOutput(ProcessBuilder.Redirect.INHERIT)

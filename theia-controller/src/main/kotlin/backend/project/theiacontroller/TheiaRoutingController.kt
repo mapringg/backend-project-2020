@@ -25,7 +25,7 @@ class TheiaRoutingController {
     }
 
     @RequestMapping
-    @Async
+    @Async("containerExecutor")
     fun routeToInstance(@CookieValue("uid") id: String, request: HttpServletRequest, response: HttpServletResponse): CompletableFuture<ResponseEntity<String>>{
         return try {
             val route = TheiaContainerController.getRoute(id)
