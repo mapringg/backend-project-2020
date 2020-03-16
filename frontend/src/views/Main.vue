@@ -1,16 +1,28 @@
 <template>
- <div></div>
+  <div></div>
 </template>
 
 <script>
+import axios from "axios";
 export default {
-  name: "main"
+  name: "main",
+  mounted() {
+    // to get the cookie data whenever component is mounted.
+    this.checkIfLoggedIn();
+  },
+  methods: {
+    checkIfLoggedIn() {
+      axios.get("http://localhost:3000/profile").then(response => {
+        console.log(response.data.user);
+      });
+    }
+  }
 };
 </script>
 
 <style lang="scss" scoped>
-  #card-file-input{
-    height: 25px;
-    width: 60%;
-  }
+#card-file-input {
+  height: 25px;
+  width: 60%;
+}
 </style>
