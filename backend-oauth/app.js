@@ -20,10 +20,9 @@ app.use(
   cors({
     origin: 'http://localhost:8080', // restrict calls to those this address
     methods: 'GET', // only allow GET requests
+    credentials: true,
   })
 );
-
-app.set('view engine', 'ejs');
 
 app.use(
   cookieSession({
