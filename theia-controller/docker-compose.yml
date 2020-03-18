@@ -2,18 +2,6 @@ version: "3.7"
 
 
 services:
-  nginx:
-    container_name: nginx-proxy
-    image: nginx
-    ports:
-      - 80:80
-    expose:
-      - 80
-    depends_on:
-      - containerManager
-    volumes:
-    - nginx_config:/etc/nginx
-    restart: always
 
   containerManager:
     container_name: spring-container-manager
@@ -23,10 +11,7 @@ services:
       dockerfile: dockerfile
       context: .
     environment:
-      NGINX_ADDRESS: nginx
       NGINX_DOCKER_NAME: nginx-proxy
-#      THEIA_TIMEOUT: 60000
-#      NETWORK_ADDRESS: containerManager
     volumes:
     - nginx_config:/etc/nginx
     - /var/run/docker.sock:/var/run/docker.sock

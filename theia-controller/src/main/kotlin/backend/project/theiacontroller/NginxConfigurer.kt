@@ -7,6 +7,7 @@ import org.springframework.core.io.ClassPathResource
 import org.springframework.stereotype.Component
 import java.io.File
 import java.lang.Thread.sleep
+import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
 @Component
@@ -17,9 +18,12 @@ object NginxConfigurer {
     private val NGINX_CONTAINER_NAME = System.getenv("NGINX_DOCKER_NAME")?: "nginx-container"
     private val NGINX_ADDRESS = System.getenv("NGINX_ADDRESS")?: "localhost"
     private val NGINX_PORT = System.getenv("NGINX_PORT")?: 80
+    private val NGINX_CONF_VOLUME_NAME = System.getenv("NGINX_CONF_VOLUME_NAME")?: "theia-controller_nginx_config"
+    private val NGINX_CONF_VOLUME_DIRECTORY = System.getenv("NGINX_CONF_VOLUME_DIRECTORY")?: "/etc/nginx/"
+    private val NGINX_STARTUP_COMMAND = "docker run -v $NGINX_CONF_VOLUME_NAME:$NGINX_CONF_VOLUME_DIRECTORY --network theia-controller_default -p 80:80 --restart unless-stopped --name $NGINX_CONTAINER_NAME nginx"
     private val WAIT_NGINX_TIMEOUT = if(System.getenv("NGINX_WAIT_TIMEOUT") == null) 10000 else System.getenv("NGINX_WAIT_TIMEOUT").toLong()
     private val NGINX_CURL_DELAY = if(System.getenv("NGINX_CURL_DELAY") == null) 300 else System.getenv("NGINX_CURL_DELAY").toLong()
-    private val NGINX_STARTUP_WAIT = if(System.getenv("NGINX_STARTUP_WAIT") == null) 60000 else System.getenv("NGINX_STARTUP_WAIT").toLong()
+    private val NGINX_STARTUP_WAIT = if(System.getenv("NGINX_STARTUP_WAIT") == null) 10000 else System.getenv("NGINX_STARTUP_WAIT").toLong()
 
     init {
         val nginxConfig = File(filePath)
@@ -44,7 +48,23 @@ object NginxConfigurer {
         val rp = rb.start()
         rp.waitFor()
 
-        rewriteConfig(listOf(),true)
+        logger.info("Removing old nginx container if its running")
+        val stopper = ProcessBuilder("docker container stop $NGINX_CONTAINER_NAME".split(' ')).redirectError(ProcessBuilder.Redirect.INHERIT).redirectOutput(ProcessBuilder.Redirect.INHERIT).start()
+        stopper.waitFor()
+        val removal = ProcessBuilder("docker container rm $NGINX_CONTAINER_NAME".split(' ')).start()
+        removal.waitFor()
+
+        rewriteConfig(listOf(),false)
+
+        logger.info("Starting nginx server usng command $NGINX_STARTUP_COMMAND")
+        val nb = ProcessBuilder(NGINX_STARTUP_COMMAND.split(' '))
+        nb.redirectError(ProcessBuilder.Redirect.INHERIT)
+        nb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
+        val nginx = nb.start()
+
+        nginx.waitFor(3000,TimeUnit.MILLISECONDS)
+        if(!nginx.isAlive)
+            throw Exception("Nginx failed to startup. Exit value: ${nginx.exitValue()}")
 
     }
 
@@ -64,7 +84,7 @@ object NginxConfigurer {
     private fun waitForNginxStartup(){
         for(i in 0..NGINX_STARTUP_WAIT/ NGINX_CURL_DELAY){
 //            logger.info("Polling nginx")
-            val cb = ProcessBuilder("curl","$NGINX_ADDRESS:$NGINX_PORT")
+            val cb = ProcessBuilder("curl","$NGINX_CONTAINER_NAME:$NGINX_PORT")
             val c = cb.start()
             c.waitFor()
             if(c.exitValue() == 0) return
@@ -111,5 +131,6 @@ object NginxConfigurer {
         val uc = ub.start()
         uc.waitFor()
         if(uc.exitValue() != 0) logger.error("Error reloading nginx config")
+        logger.info("Reloaded nginx config")
     }
 }
