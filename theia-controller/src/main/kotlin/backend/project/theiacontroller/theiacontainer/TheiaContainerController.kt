@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
+import java.io.File
 import java.lang.Thread.sleep
 import java.util.*
 import java.util.concurrent.CompletableFuture
@@ -30,13 +31,28 @@ object TheiaContainerController {
     private const val THEIA_STARTUP_CURL_TIME = 300L
     private val THEIA_IMAGE: String = System.getenv("THEIA-IMAGE") ?: "theiaide/theia" //ENVIRONMENT VARIABLE FOR THEIA IMAGE
     private val THEIA_CONTAINER_TIMEOUT: Long = if (System.getenv("THEIA_TIMEOUT") == null) 60 * 60 * 1000 else System.getenv("THEIA_TIMEOUT").toLong() //ENVIRONMENT VARIABLE FOR TIMEOUT TIME FOR CONTAINERS (WHEN TO SHUT DOWN)
-    private val THEIA_STARTUP_SCRIPT = "docker run --network theia-controller_default --name %s $THEIA_IMAGE"
+    private val THEIA_STARTUP_SCRIPT = "docker run --rm -u \$(id -u \$USER):\$(id -g \$USER) --network theia-controller_default -v %s:/home/project:delegated --name %s $THEIA_IMAGE"
+    private val USER_FILESYSTEM_VOLUME_LOCATION = System.getenv("USER_FILE_VOLUME")?: "/var/theia-users"
     private val containerMap = ConcurrentHashMap<String,ContainerInfo>()
     private val waitingClients = ConcurrentHashMap<String,LinkedList<ClientRequest>>()
 
-//    init {
-//        shutDownOldContainers()
-//    }
+    init {
+        //Remove any floating containers
+        logger.info("Removing floating containers")
+        val rb = ProcessBuilder("/bin/sh","-c","docker ps --filter name=theia-* -aq | xargs docker stop | xargs docker rm")
+//        rb.redirectError(ProcessBuilder.Redirect.INHERIT)
+//        rb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
+        val rp = rb.start()
+        rp.waitFor()
+
+        logger.info("Checking user filesystem")
+        val fileSystem = File(USER_FILESYSTEM_VOLUME_LOCATION)
+        fileSystem.mkdirs()
+
+        if(!fileSystem.exists())
+            throw Exception("Could not find user filesystem")
+
+    }
 
     fun getTheiaContainerName(id: String): String{
         return "theia-$id"
@@ -47,15 +63,21 @@ object TheiaContainerController {
         return "/$id"
     }
 
+    private fun initUserVolume(id: String){
+        val folder = File("$USER_FILESYSTEM_VOLUME_LOCATION/$id")
+        folder.mkdir()
+    }
+
     private fun startContainer(id: String){
         logger.info("Attempting to start a container")
         //TODO Maybe get args from environment variable too since were allowing environment variables to set docker args
         //TODO Use config server for theia stuff
+        initUserVolume(id)
         val dockerId = getTheiaContainerName(id)
-        logger.info("Running command ${THEIA_STARTUP_SCRIPT.format(dockerId)}")
-        val pb = ProcessBuilder(THEIA_STARTUP_SCRIPT.format(dockerId).split(" "))
-//            pb.redirectError(ProcessBuilder.Redirect.INHERIT)
-//            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
+        logger.info("Running command ${THEIA_STARTUP_SCRIPT.format("$USER_FILESYSTEM_VOLUME_LOCATION/$id",dockerId)}")
+        val pb = ProcessBuilder("/bin/sh","-c",THEIA_STARTUP_SCRIPT.format("$USER_FILESYSTEM_VOLUME_LOCATION/$id",dockerId))
+            pb.redirectError(ProcessBuilder.Redirect.INHERIT)
+            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
         val p = pb.start()
         p.waitFor(THEIA_STARTUP_WAIT, TimeUnit.MILLISECONDS)
         logger.info("Theia container started for $id")
@@ -89,6 +111,7 @@ object TheiaContainerController {
         waitingClients[id]!!.forEach{
             it.future.completeExceptionally(exception)
         }
+        waitingClients[id]!!.clear()
     }
 
     private fun containerStartupSuccess(id: String, p: Process){
@@ -101,6 +124,7 @@ object TheiaContainerController {
                 it.response.sendRedirect(getRoute(id))
                 it.future.complete(ResponseEntity(HttpStatus.OK))
             }
+            waitingClients[id]!!.clear()
         }
         catch(e: Exception){
             containerStartupFailure(id,e)
@@ -109,11 +133,13 @@ object TheiaContainerController {
 
     fun waitForContainer(id: String,request: ClientRequest){
         if(waitingClients[id] == null) waitingClients[id] = LinkedList()
+        var noWaiting: Int
         synchronized(waitingClients[id]!!){
             waitingClients[id]!!.add(request)
-            if(waitingClients[id]!!.size == 1){
-                startContainer(id)
-            }
+            noWaiting = waitingClients[id]!!.size
+        }
+        if(noWaiting == 1){
+            startContainer(id)
         }
     }
 

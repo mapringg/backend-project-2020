@@ -13,13 +13,12 @@ import kotlin.system.exitProcess
 @Component
 object NginxConfigurer {
 
-    private val filePath = System.getenv("NGINX-CONFIG-FILEPATH")?: "/etc/nginx/nginx.conf" //ENVIRONMENT VARIABLE FOR NGINX CONFIG FILE LOCATION (MUST BE ON SAME FILESYSTEM)
     private val logger: Logger = LoggerFactory.getLogger(this.javaClass)
     private val NGINX_CONTAINER_NAME = System.getenv("NGINX_DOCKER_NAME")?: "nginx-container"
-    private val NGINX_ADDRESS = System.getenv("NGINX_ADDRESS")?: "localhost"
     private val NGINX_PORT = System.getenv("NGINX_PORT")?: 80
     private val NGINX_CONF_VOLUME_NAME = System.getenv("NGINX_CONF_VOLUME_NAME")?: "theia-controller_nginx_config"
     private val NGINX_CONF_VOLUME_DIRECTORY = System.getenv("NGINX_CONF_VOLUME_DIRECTORY")?: "/etc/nginx/"
+    private val filePath = "$NGINX_CONF_VOLUME_DIRECTORY/nginx.conf" //ENVIRONMENT VARIABLE FOR NGINX CONFIG FILE LOCATION (MUST BE ON SAME FILESYSTEM)
     private val NGINX_STARTUP_COMMAND = "docker run -v $NGINX_CONF_VOLUME_NAME:$NGINX_CONF_VOLUME_DIRECTORY --network theia-controller_default -p 80:80 --restart unless-stopped --name $NGINX_CONTAINER_NAME nginx"
     private val WAIT_NGINX_TIMEOUT = if(System.getenv("NGINX_WAIT_TIMEOUT") == null) 10000 else System.getenv("NGINX_WAIT_TIMEOUT").toLong()
     private val NGINX_CURL_DELAY = if(System.getenv("NGINX_CURL_DELAY") == null) 300 else System.getenv("NGINX_CURL_DELAY").toLong()
@@ -40,14 +39,6 @@ object NginxConfigurer {
             exitProcess(1)
         }
 
-        //Remove any floating containers
-        logger.info("Removing floating containers")
-        val rb = ProcessBuilder("/bin/sh","-c","docker ps --filter name=theia-* -aq | xargs docker stop | xargs docker rm")
-//        rb.redirectError(ProcessBuilder.Redirect.INHERIT)
-//        rb.redirectOutput(ProcessBuilder.Redirect.INHERIT)
-        val rp = rb.start()
-        rp.waitFor()
-
         logger.info("Removing old nginx container if its running")
         val stopper = ProcessBuilder("docker container stop $NGINX_CONTAINER_NAME".split(' ')).redirectError(ProcessBuilder.Redirect.INHERIT).redirectOutput(ProcessBuilder.Redirect.INHERIT).start()
         stopper.waitFor()
@@ -65,6 +56,11 @@ object NginxConfigurer {
         nginx.waitFor(3000,TimeUnit.MILLISECONDS)
         if(!nginx.isAlive)
             throw Exception("Nginx failed to startup. Exit value: ${nginx.exitValue()}")
+
+        if(!rewriteConfig(listOf(),true)){
+            logger.error("Could not communicate with nginx server.")
+            exitProcess(3)
+        }
 
     }
 
@@ -95,7 +91,7 @@ object NginxConfigurer {
     }
 
     @Synchronized
-    final fun rewriteConfig(containers: Collection<String>, reload: Boolean){
+    final fun rewriteConfig(containers: Collection<String>, reload: Boolean): Boolean{
         val preConfig = ClassPathResource("/templates/nginx-pre-default").inputStream.reader().readText()
         val nginxConfig = File(filePath)
 
@@ -121,9 +117,10 @@ object NginxConfigurer {
 //        logger.info(nginxConfig.readText())
 
         if(reload)
-            reloadNginxConfig()
+            return reloadNginxConfig()
+        return true
     }
-    private fun reloadNginxConfig(){
+    private fun reloadNginxConfig(): Boolean{
         logger.info("Reloading nginx config")
         waitForNginxStartup()
         val ub = ProcessBuilder("docker exec $NGINX_CONTAINER_NAME nginx -s reload".split(' '))
@@ -131,7 +128,11 @@ object NginxConfigurer {
 //        ub.redirectOutput(ProcessBuilder.Redirect.INHERIT)
         val uc = ub.start()
         uc.waitFor()
-        if(uc.exitValue() != 0) logger.error("Error reloading nginx config")
+        if(uc.exitValue() != 0) {
+            logger.error("Error reloading nginx config")
+            return false
+        }
         logger.info("Reloaded nginx config")
+        return true
     }
 }

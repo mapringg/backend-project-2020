@@ -15,8 +15,10 @@ services:
     volumes:
     - nginx_config:/etc/nginx
     - /var/run/docker.sock:/var/run/docker.sock
+    - user_files:/var/theia-users
     command:
       - docker:dind dockerd
 
 volumes:
   nginx_config:
+  user_files:
