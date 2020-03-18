@@ -1,4 +1,5 @@
 version: "3.7"
+
 services:
 
   containerManager:
@@ -7,12 +8,13 @@ services:
     privileged: true
     environment:
       NGINX_DOCKER_NAME: nginx-proxy
-    #      NETWORK_ADDRESS: containerManager
     volumes:
       - nginx_config:/etc/nginx
       - /var/run/docker.sock:/var/run/docker.sock
+      - user_files:/var/theia-users
     command:
       - docker:dind dockerd
 
 volumes:
   nginx_config:
+  user_files:
