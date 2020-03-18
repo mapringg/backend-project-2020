@@ -4,7 +4,10 @@
     <a href="/auth/google">
       <i class="fa-10x fab fa-facebook" style="color:blue"></i>
     </a>
-    <a href="/auth/google">
+    <!-- <a @click="onGoogle()">
+      <i class="fa-10x fab fa-google-plus" style="color:red"></i>
+    </a>-->
+    <a href="http://localhost:3000/auth/google">
       <i class="fa-10x fab fa-google-plus" style="color:red"></i>
     </a>
     <a href="/auth/google" style="display:flex">
@@ -14,7 +17,27 @@
 </template>
 
 <script>
-export default {};
+// import loginService from "../services/login.service";
+// import axios from "axios";
+export default {
+  mounted() {
+    // to get the cookie data whenever component is mounted.
+    // this.checkIfLoggedIn();
+  },
+  methods: {
+    // checkIfLoggedIn() {
+    //   axios.get("http://localhost:3000/auth/check").then(response => {
+    //     console.log(response.data);
+    //   });
+    // }
+    onGoogle() {
+      // window.open("http://localhost:3000/auth/google")
+      // axios.get("http://localhost:3000/auth/google").then(response => {
+      //   console.log(response.data);
+      // });
+    }
+  }
+};
 </script>
 
 <style scoped>

@@ -9,7 +9,7 @@
 <script>
 import LoginForm from "../components/LoginForm";
 export default {
-  name: "login",
+  name: "Login",
   components: {
     LoginForm
   }
@@ -18,7 +18,11 @@ export default {
 
 <style scoped>
 #login {
-  background-image: radial-gradient( circle farthest-corner at 10% 20%,  rgba(0,107,141,1) 0%, rgba(0,69,91,1) 90% );
+  background-image: radial-gradient(
+    circle farthest-corner at 10% 20%,
+    rgba(0, 107, 141, 1) 0%,
+    rgba(0, 69, 91, 1) 90%
+  );
   background-size: 100% 100%;
   height: 100%;
 }

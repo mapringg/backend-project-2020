@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cookieSession = require('cookie-session');
 const passport = require('passport');
+const cors = require('cors');
 const keys = require('./config/keys');
 
 require('./config/passport-setup');
@@ -15,8 +16,13 @@ mongoose.connect('mongodb://localhost:27017/backend-project-2020', {
 });
 
 const app = express();
-
-app.set('view engine', 'ejs');
+app.use(
+  cors({
+    origin: 'http://localhost:8080', // restrict calls to those this address
+    methods: 'GET', // only allow GET requests
+    credentials: true,
+  })
+);
 
 app.use(
   cookieSession({
