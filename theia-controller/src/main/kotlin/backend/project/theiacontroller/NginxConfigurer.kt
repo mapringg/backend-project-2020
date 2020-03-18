@@ -72,10 +72,11 @@ object NginxConfigurer {
         logger.info("Waiting for nginx to register container connection")
         val loops = WAIT_NGINX_TIMEOUT/ NGINX_CURL_DELAY
         for(i in 0..loops) {
-            val cb = ProcessBuilder("curl $NGINX_ADDRESS/$id".split(' '))
+            val cb = ProcessBuilder("curl -I $NGINX_CONTAINER_NAME/$id | head -1".split(' '))
             val cp = cb.start()
             val output = cp.inputStream.bufferedReader().readText()
-            if(!output.contains("<head><title>404 Not Found</title></head>")) return
+//            println(output)
+            if(!output.contains("404")) return
             else sleep(NGINX_CURL_DELAY)
         }
         throw Exception("Could not connect to theia instance through nginx")
@@ -126,8 +127,8 @@ object NginxConfigurer {
         logger.info("Reloading nginx config")
         waitForNginxStartup()
         val ub = ProcessBuilder("docker exec $NGINX_CONTAINER_NAME nginx -s reload".split(' '))
-        ub.redirectError(ProcessBuilder.Redirect.INHERIT)
-        ub.redirectOutput(ProcessBuilder.Redirect.INHERIT)
+//        ub.redirectError(ProcessBuilder.Redirect.INHERIT)
+//        ub.redirectOutput(ProcessBuilder.Redirect.INHERIT)
         val uc = ub.start()
         uc.waitFor()
         if(uc.exitValue() != 0) logger.error("Error reloading nginx config")
