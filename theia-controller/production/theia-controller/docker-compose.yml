@@ -4,7 +4,7 @@ services:
 
   containerManager:
     container_name: spring-container-manager
-    image: registry.gitlab.com/brandonfox/backend-project-2020/theia-controller
+    image: registry.gitlab.com/brandonfox/backend-project-2020/theia-controller:latest
     privileged: true
     environment:
       NGINX_DOCKER_NAME: nginx-proxy
